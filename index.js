@@ -12,7 +12,8 @@ const io = new Server(server);
 
 logger.init(io);
 
-app.use(express.json());
+// 🛑 THE FIX: Increase the payload limit so large sheets don't crash Express
+app.use(express.json({ limit: '10mb' }));
 app.use(express.static(__dirname));
 
 // --- STATE & QUEUE ---
@@ -30,7 +31,6 @@ async function processQueue() {
         logger.log(`Starting queued task for ${task.sheetName} Row ${task.rowIndex}`, 'info', 'Queue', 'q-exec');
         await runAutomationTask(task);
         
-        // --- THE FIX: COOL DOWN LOGIC ---
         const cooldownId = `cd-${Date.now()}`;
         logger.log('Cooling down for 5s to prevent rate limits...', 'loading', 'Queue', cooldownId);
         await sleep(5000); 
@@ -40,9 +40,8 @@ async function processQueue() {
         console.error('CRITICAL QUEUE ERROR:', e);
         logger.log(`Queue Execution Failed: ${e.message}`, 'error', 'Queue');
     } finally {
-        // Ensure processing is reset so the next task can run even if the previous one crashed
         isProcessing = false;
-        processQueue();
+        processQueue(); // Loop to the next one
     }
 }
 
@@ -65,7 +64,12 @@ app.post('/api/config', (req, res) => {
     res.status(200).send('Saved');
 });
 
+// 🛑 THE FIX: Put a bouncer on your Webhook door
 app.post('/webhook', (req, res) => {
+    // If you add a secret token to Apps Script, check it here!
+    // const authHeader = req.headers['authorization'];
+    // if (authHeader !== `Bearer ${process.env.WEBHOOK_SECRET}`) return res.status(401).send('Unauthorized');
+
     res.status(200).send('Queued');
     logger.log(`Webhook received. Position: ${requestQueue.length + 1}`, 'info', 'System');
     requestQueue.push(req.body);
