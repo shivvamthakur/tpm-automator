@@ -133,7 +133,7 @@ async function runAutomationTask(task) {
             logger.log(`Updating Sheet...`, 'loading', projectName, `${sid}-wb`);
             
             // Calculate EXACTLY where the write-back columns are so we don't break the sheet
-            const slackDraftColLetter = indexToLetter(getColIndex(headers, 'Slack Draft (Raw Text)'));
+            const slackDraftColLetter = indexToLetter(getColIndex(headers, 'Slack Draft'));
             const triggerColLetter = indexToLetter(getColIndex(headers, 'Trigger'));
             
             await gsapi.spreadsheets.values.update({
@@ -149,7 +149,7 @@ async function runAutomationTask(task) {
             
             // Look up Slack details dynamically by header name
             const slackChannelId = rowData[getColIndex(headers, 'Slack Channel ID')]; 
-            const slackMessage = rowData[getColIndex(headers, 'Slack Draft (Raw Text)')];
+            const slackMessage = rowData[getColIndex(headers, 'Slack Draft')];
 
             if (!slackChannelId || !slackMessage) throw new Error("Missing Slack ID or Draft Text in Sheet.");
 
