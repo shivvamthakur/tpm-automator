@@ -1,6 +1,6 @@
 module.exports = {
-  SPREADSHEET_ID: '10eU-PIpTrBUcQUeIC4dXsfJEAAUXF6Ehj2dTkOBbZvY',
-  DRIVE_FOLDER_ID: '1gVpomIQKSKSZfC16VgCNy7kCTwIIE9cN', // Replace with your Folder ID
+  SPREADSHEET_ID: 'process.env.SPREADSHEET_ID', // MAKING THE SHEET DYNAMIC
+  DRIVE_FOLDER_ID: 'process.env.DRIVE_FOLDER_ID', // Replace with your Folder ID
   SLACK_BOT_TOKEN: process.env.SLACK_BOT_TOKEN,
   EMAIL_CSS_SKELETON: `
     <style>
