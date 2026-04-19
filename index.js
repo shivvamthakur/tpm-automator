@@ -4,7 +4,7 @@ const http = require('http');
 const { Server } = require('socket.io'); 
 const path = require('path');
 const logger = require('./utils/logger');
-const { runAutomationTask, getVisibleHeadersForUi, saveAiConfigToSheet } = require('./services/orchestrator');
+const { runAutomationTask, getVisibleHeadersForUi, saveAiConfigToSheet, updateSheetTrigger } = require('./services/orchestrator');
 
 const app = express();
 const server = http.createServer(app);
@@ -64,6 +64,29 @@ app.post('/api/config', async (req, res) => {
     } catch (error) {
         console.error(error);
         res.status(500).send('Failed to save config');
+    }
+});
+
+app.post('/api/action', async (req, res) => {
+    try {
+        const { sheetName, rowIndex, triggerValue, customPrompt, target } = req.body;
+        
+        // 1. Instantly update the actual Google Sheet so the state "travels back"
+        await updateSheetTrigger(sheetName, rowIndex, triggerValue);
+        
+        // 2. Push it directly to our processing queue
+        const targetName = `${sheetName} Row ${rowIndex}`;
+        let logMsg = `Manual UI Action Triggered for [${targetName}] -> ${triggerValue}`;
+        if (customPrompt) logMsg += ` (Targeting: ${target.toUpperCase()} - Custom Rules Applied)`;
+        logger.log(logMsg, 'info', 'System');
+        
+        requestQueue.push({ sheetName, rowIndex, triggerValue, customPrompt, target });
+        processQueue();
+        
+        res.status(200).send('Action queued');
+    } catch (error) {
+        console.error(error);
+        res.status(500).send(error.message);
     }
 });
 

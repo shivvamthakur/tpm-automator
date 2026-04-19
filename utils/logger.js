@@ -20,8 +20,9 @@ module.exports = {
      * @param {string} status - 'info' | 'loading' | 'success' | 'error' | 'warning'
      * @param {string} projectName - Name of the project being processed
      * @param {string} stepId - Unique identifier to target specific UI lines (prevents duplicate lines)
+     * @param {Object} meta - Optional metadata to pass to the UI (e.g. links, row IDs)
      */
-    log: (message, status = 'info', projectName = 'System', stepId = null) => {
+    log: (message, status = 'info', projectName = 'System', stepId = null, meta = null) => {
         const time = new Date().toLocaleTimeString();
         
         // Define terminal icons
@@ -43,7 +44,8 @@ module.exports = {
                 time, 
                 icon,
                 // Generate a random ID if none provided to ensure every log is trackable
-                stepId: stepId || `log-${Math.random().toString(36).substr(2, 9)}`
+                stepId: stepId || `log-${Math.random().toString(36).substr(2, 9)}`,
+                meta
             });
         }
     }
