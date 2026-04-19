@@ -7,26 +7,29 @@ const pdf = require('../lib/pdf');
 const slack = require('../lib/slack');
 const logger = require('../utils/logger');
 
-// 🛑 Smart Pathing for Render Secrets
 const credentialsPath = process.env.RENDER ? '/etc/secrets/google-credentials.json' : './google-credentials.json';
-
 const auth = new google.auth.GoogleAuth({
   keyFile: credentialsPath,
   scopes: ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'],
 });
 
+// 🚥 THE TRAFFIC COP
+let routeToGeminiNext = true; 
+
+let aiConfig = { emailColumns: [], slackColumns: [] };
+
+// 🧠 THE MEMORY
+let cachedSchema = null;
+let schemaCacheTime = 0;
+const CACHE_TTL = 5 * 60 * 1000; 
+
 function extractLatestNotes(text) {
     if (!text) return "";
-    const sections = text.split(/\n\s*\n/);
-    return sections[0].trim();
+    return text.split(/\n\s*\n/)[0].trim();
 }
 
 async function getVisibleHeaders(gsapi, spreadsheetId, sheetName) {
-    const spreadsheet = await gsapi.spreadsheets.get({
-        spreadsheetId,
-        includeGridData: true,
-        ranges: [`${sheetName}!1:1`]
-    });
+    const spreadsheet = await gsapi.spreadsheets.get({ spreadsheetId, includeGridData: true, ranges: [`${sheetName}!1:1`] });
     const sheet = spreadsheet.data.sheets.find(s => s.properties.title === sheetName);
     if (!sheet || sheet.properties.hidden) return null;
     
@@ -54,53 +57,53 @@ function indexToLetter(index) {
     return letter;
 }
 
-// 🛑 THE NEW BRAINS: Fetches schema from the hidden System_Settings tab
 async function getDynamicSchema(gsapi, spreadsheetId) {
-    let colMap = {
-        projectName: 'Project Name',
-        slackChannelId: 'Slack Channel ID',
-        slackDraft: 'Slack Draft (Raw Text)',
-        trigger: 'Trigger'
-    };
+    if (cachedSchema && (Date.now() - schemaCacheTime < CACHE_TTL)) return cachedSchema;
+
+    let colMap = { projectName: 'Project Name', slackChannelId: 'Slack Channel ID', slackDraft: 'Slack Draft (Raw Text)', trigger: 'Trigger',slackUrl: 'Slack Link', // 👈 NEW
+        emailUrl: 'Email Link', };
 
     try {
-        const response = await gsapi.spreadsheets.values.get({
-            spreadsheetId,
-            range: `System_Settings!A2:B20`,
-        });
-        
+        const response = await gsapi.spreadsheets.values.get({ spreadsheetId, range: `System_Settings!A2:B20` });
         const rows = response.data.values;
         if (rows && rows.length > 0) {
             rows.forEach(row => {
-                if (row[0] && row[1]) colMap[row[0].trim()] = row[1].trim();
+                const key = row[0] ? row[0].trim() : '';
+                const val = row[1] ? row[1].trim() : '';
+                if (key && val) {
+                    if (key === 'emailColumns' || key === 'slackColumns') {
+                        aiConfig[key] = val.split(',').map(s => s.trim()).filter(s => s);
+                    } else {
+                        colMap[key] = val;
+                    }
+                }
             });
         }
+        cachedSchema = colMap;
+        schemaCacheTime = Date.now();
+        logger.log(`Schema fetched & cached for 5 mins 🧠`, 'info', 'System');
         return colMap;
     } catch (error) {
-        logger.log('Could not find System_Settings tab, using default columns.', 'warning', 'System');
+        logger.log('Could not find System_Settings tab, using defaults.', 'warning', 'System');
         return colMap;
     }
 }
 
 async function runAutomationTask(task) {
     const { sheetName, rowIndex, triggerValue } = task;
-    let authClient, gsapi, projectName = 'System';
+   // 👇 THE FIX: Give it a temporary context name until we fetch the real one
+let authClient, gsapi, projectName = `${sheetName} R${rowIndex}`;
     const sid = `task-${Date.now()}`;
 
     try {
-        logger.log(`Connecting to Workspace...`, 'loading', 'System', `${sid}-auth`);
         authClient = await auth.getClient();
         gsapi = google.sheets({ version: 'v4', auth: authClient });
-        logger.log(`Connected to Google APIs.`, 'success', 'System', `${sid}-auth`);
 
-        logger.log(`Loading Schema Map...`, 'loading', 'System', `${sid}-schema`);
         const colMap = await getDynamicSchema(gsapi, config.SPREADSHEET_ID);
-
-        logger.log(`Fetching project data...`, 'loading', sheetName, `${sid}-data`);
         const headers = await getVisibleHeaders(gsapi, config.SPREADSHEET_ID, sheetName);
         if (!headers) throw new Error("Sheet is hidden.");
 
-        const response = await gsapi.spreadsheets.values.get({
+const response = await gsapi.spreadsheets.values.get({
             spreadsheetId: config.SPREADSHEET_ID,
             range: `${sheetName}!A${rowIndex}:ZZ${rowIndex}`, 
         });
@@ -108,60 +111,102 @@ async function runAutomationTask(task) {
         if (!rowData) throw new Error("Row is empty.");
         
         const projIdx = headers.indexOf(colMap.projectName);
-        projectName = projIdx !== -1 ? rowData[projIdx] : 'Unknown Project';
+        
+        // 👇 THE FIX: Overwrite the temporary name with the REAL Project Name!
+        if (projIdx !== -1 && rowData[projIdx]) {
+            projectName = rowData[projIdx];
+        }
+        
         const dateSuffix = new Date().toLocaleDateString('en-GB').replace(/\//g, '-');
         
+        // Now it switches perfectly to the real project name for the rest of the logs
         logger.log(`Data locked for ${projectName}.`, 'success', projectName, `${sid}-data`);
 
         if (triggerValue.toLowerCase() === 'new') {
-            logger.log(`Compiling AI Context...`, 'loading', projectName, `${sid}-ctx`);
-            
-            // Send a lean context to the AI to avoid the 4MB payload crash
-            const context = {
-                progress: rowData[getColIndex(headers, 'Progress')] || '',
-                wip: rowData[getColIndex(headers, 'WIP')] || '',
-                notes: extractLatestNotes(rowData[getColIndex(headers, 'Task and Status comments')]) || ''
+            const buildCtx = (cols) => {
+                const ctx = {};
+                if (!cols || cols.length === 0) return ctx;
+                cols.forEach(c => {
+                    const i = headers.indexOf(c);
+                    if (i !== -1 && rowData[i]) {
+                        let val = rowData[i].trim();
+                        if (c === 'Task and Status comments') val = extractLatestNotes(val);
+                        if (val && val !== "-") ctx[c] = val; 
+                    }
+                });
+                return ctx;
             };
-            logger.log(`Context ready.`, 'success', projectName, `${sid}-ctx`);
 
-            logger.log(`AI Synthesis (Gemini 2.5)...`, 'loading', projectName, `${sid}-ai`);
+            const context = { email: buildCtx(aiConfig.emailColumns), slack: buildCtx(aiConfig.slackColumns) };
+            logger.log(`Context compiled dynamically.`, 'success', projectName, `${sid}-ctx`);
+
             let drafts;
             try {
-                drafts = await gemini.generateAIDrafts(projectName, context);
-                logger.log(`Drafts generated by Gemini.`, 'success', projectName, `${sid}-ai`);
-            } catch (err) {
-                logger.log(`Gemini Limit hit. Failing over to Mistral...`, 'warning', projectName, `${sid}-ai`);
-                await new Promise(r => setTimeout(r, 1500)); 
-                drafts = await mistral.generateAIDrafts(projectName, context);
-                logger.log(`Drafts generated by Mistral (Failover).`, 'success', projectName, `${sid}-ai`);
+                if (routeToGeminiNext) {
+                    logger.log(`[Router] Sending traffic to Gemini...`, 'loading', projectName, `${sid}-gemini-run`);
+                    try {
+                        drafts = await gemini.generateAIDrafts(projectName, context);
+                        logger.log(`Drafts generated by Gemini.`, 'success', projectName, `${sid}-gemini-run`);
+                    } catch (err) {
+                        logger.log(`Gemini limit hit. Bouncing to Mistral...`, 'warning', projectName, `${sid}-gemini-run`);
+                        logger.log(`[Failover] Routing to Mistral...`, 'loading', projectName, `${sid}-mistral-fail`);
+                        drafts = await mistral.generateAIDrafts(projectName, context);
+                        logger.log(`Drafts generated by Mistral (Failover).`, 'success', projectName, `${sid}-mistral-fail`);
+                    }
+                } else {
+                    logger.log(`[Router] Sending traffic to Mistral...`, 'loading', projectName, `${sid}-mistral-run`);
+                    try {
+                        drafts = await mistral.generateAIDrafts(projectName, context);
+                        logger.log(`Drafts generated by Mistral.`, 'success', projectName, `${sid}-mistral-run`);
+                    } catch (err) {
+                        logger.log(`Mistral limit hit. Bouncing to Gemini...`, 'warning', projectName, `${sid}-mistral-run`);
+                        logger.log(`[Failover] Routing to Gemini...`, 'loading', projectName, `${sid}-gemini-fail`);
+                        drafts = await gemini.generateAIDrafts(projectName, context);
+                        logger.log(`Drafts generated by Gemini (Failover).`, 'success', projectName, `${sid}-gemini-fail`);
+                    }
+                }
+                routeToGeminiNext = !routeToGeminiNext;
+            } catch (criticalErr) {
+                throw new Error("CRITICAL: Both AI services failed on this row.");
             }
 
-            logger.log(`Generating Documents...`, 'loading', projectName, `${sid}-docs`);
+            logger.log(`Firing up PDF and Slack tasks concurrently... 🏎️💨`, 'loading', projectName, `${sid}-docs-main`);
             const html = `<html>${config.EMAIL_CSS_SKELETON}<body>${drafts.email}</body></html>`;
-            const pdfBuf = await pdf.convertHTMLToPDF(html);
-            const emailLink = await drive.uploadPDFToDrive(authClient, `emailWSR-${projectName}-${dateSuffix}.pdf`, pdfBuf);
-            const slackLink = await drive.createSlackDoc(authClient, `slackWSR-${projectName}-${dateSuffix}`, drafts.slack);
-            logger.log(`Documents published to Drive.`, 'success', projectName, `${sid}-docs`);
+            const emailFileName = `emailWSR-${projectName}-${dateSuffix}.pdf`;
+            const slackFileName = `slackWSR-${projectName}-${dateSuffix}`;
+
+            const emailTask = pdf.convertHTMLToPDF(html).then(pdfBuf => drive.uploadPDFToDrive(authClient, emailFileName, pdfBuf));
+            const slackTask = drive.createSlackDoc(authClient, slackFileName, drafts.slack);
+
+            const [emailLink, slackLink] = await Promise.all([emailTask, slackTask]);
+            logger.log(`Both documents published perfectly.`, 'success', projectName, `${sid}-docs-main`);
 
             logger.log(`Updating Sheet...`, 'loading', projectName, `${sid}-wb`);
             
-            const slackDraftColLetter = indexToLetter(getColIndex(headers, colMap.slackDraft));
-            const triggerColLetter = indexToLetter(getColIndex(headers, colMap.trigger));
+            // 1. Find the exact column letter for every single piece of data
+            const draftCol = indexToLetter(getColIndex(headers, colMap.slackDraft));
+            const slackUrlCol = indexToLetter(getColIndex(headers, colMap.slackUrl));
+            const emailUrlCol = indexToLetter(getColIndex(headers, colMap.emailUrl));
+            const triggerCol = indexToLetter(getColIndex(headers, colMap.trigger));
             
-            await gsapi.spreadsheets.values.update({
+            // 2. Use batchUpdate to snipe exact cells. Column order no longer matters!
+            await gsapi.spreadsheets.values.batchUpdate({
                 spreadsheetId: config.SPREADSHEET_ID,
-                range: `${sheetName}!${slackDraftColLetter}${rowIndex}:${triggerColLetter}${rowIndex}`,
-                valueInputOption: 'RAW',
-                resource: { values: [[ String(drafts.slack), String(slackLink), String(emailLink), 'under review' ]] }
+                resource: {
+                    valueInputOption: 'RAW',
+                    data: [
+                        { range: `${sheetName}!${draftCol}${rowIndex}`, values: [[ String(drafts.slack) ]] },
+                        { range: `${sheetName}!${slackUrlCol}${rowIndex}`, values: [[ String(slackLink) ]] },
+                        { range: `${sheetName}!${emailUrlCol}${rowIndex}`, values: [[ String(emailLink) ]] },
+                        { range: `${sheetName}!${triggerCol}${rowIndex}`, values: [[ 'under review' ]] }
+                    ]
+                }
             });
             logger.log(`✅ Generation Complete.`, 'success', projectName, `${sid}-wb`);
         }
         else if (triggerValue.toLowerCase() === 'approved') {
-            logger.log(`Distributing to Slack...`, 'loading', projectName, `${sid}-slack`);
-            
             const slackChannelId = rowData[getColIndex(headers, colMap.slackChannelId)]; 
             const slackMessage = rowData[getColIndex(headers, colMap.slackDraft)];
-
             if (!slackChannelId || !slackMessage) throw new Error("Missing Slack ID or Draft Text in Sheet.");
 
             const isSuccess = await slack.sendSlackUpdate(slackChannelId, slackMessage);
@@ -183,4 +228,32 @@ async function runAutomationTask(task) {
     }
 }
 
-module.exports = { runAutomationTask };
+async function getVisibleHeadersForUi() {
+    const authClient = await auth.getClient();
+    const gsapi = google.sheets({ version: 'v4', auth: authClient });
+    const meta = await gsapi.spreadsheets.get({ spreadsheetId: config.SPREADSHEET_ID });
+    const firstSheet = meta.data.sheets.find(s => !s.properties.hidden);
+    const headers = await getVisibleHeaders(gsapi, config.SPREADSHEET_ID, firstSheet.properties.title);
+    
+    cachedSchema = null; // Force refresh on UI load
+    await getDynamicSchema(gsapi, config.SPREADSHEET_ID);
+    return { headers: headers.filter(h => h !== null), activeConfig: aiConfig };
+}
+
+async function saveAiConfigToSheet(newConfig) {
+    if (newConfig.emailColumns) aiConfig.emailColumns = newConfig.emailColumns;
+    if (newConfig.slackColumns) aiConfig.slackColumns = newConfig.slackColumns;
+    const authClient = await auth.getClient();
+    const gsapi = google.sheets({ version: 'v4', auth: authClient });
+
+    await gsapi.spreadsheets.values.update({
+        spreadsheetId: config.SPREADSHEET_ID,
+        range: `System_Settings!A15:B16`,
+        valueInputOption: 'RAW',
+        resource: {
+            values: [['emailColumns', aiConfig.emailColumns.join(', ')], ['slackColumns', aiConfig.slackColumns.join(', ')]]
+        }
+    });
+}
+
+module.exports = { runAutomationTask, getVisibleHeadersForUi, saveAiConfigToSheet };

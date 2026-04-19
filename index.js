@@ -4,7 +4,7 @@ const http = require('http');
 const { Server } = require('socket.io'); 
 const path = require('path');
 const logger = require('./utils/logger');
-const { runAutomationTask, getVisibleHeadersForUi, updateAiConfig } = require('./services/orchestrator');
+const { runAutomationTask, getVisibleHeadersForUi, saveAiConfigToSheet } = require('./services/orchestrator');
 
 const app = express();
 const server = http.createServer(app);
@@ -12,11 +12,10 @@ const io = new Server(server);
 
 logger.init(io);
 
-// 🛑 THE FIX: Increase the payload limit so large sheets don't crash Express
+// 10MB limit to handle massive Google Sheets payloads
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(__dirname));
 
-// --- STATE & QUEUE ---
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 let isProcessing = false;
 const requestQueue = [];
@@ -32,7 +31,7 @@ async function processQueue() {
         await runAutomationTask(task);
         
         const cooldownId = `cd-${Date.now()}`;
-        logger.log('Cooling down for 5s to prevent rate limits...', 'loading', 'Queue', cooldownId);
+        logger.log('Cooling down for 5s to respect Google API limits...', 'loading', 'Queue', cooldownId);
         await sleep(5000); 
         logger.log('Cooldown complete. Queue ready.', 'success', 'Queue', cooldownId);
         
@@ -41,11 +40,10 @@ async function processQueue() {
         logger.log(`Queue Execution Failed: ${e.message}`, 'error', 'Queue');
     } finally {
         isProcessing = false;
-        processQueue(); // Loop to the next one
+        processQueue(); 
     }
 }
 
-// --- ROUTES ---
 app.get('/', (req, res) => res.redirect('/admin'));
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'admin.html')));
 
@@ -58,25 +56,29 @@ app.get('/api/columns', async (req, res) => {
     }
 });
 
-app.post('/api/config', (req, res) => {
-    updateAiConfig(req.body);
-    logger.log('AI Configuration updated.', 'success', 'System');
-    res.status(200).send('Saved');
+app.post('/api/config', async (req, res) => {
+    try {
+        await saveAiConfigToSheet(req.body);
+        logger.log('AI Context updated & saved to Sheets.', 'success', 'System');
+        res.status(200).send('Saved');
+    } catch (error) {
+        console.error(error);
+        res.status(500).send('Failed to save config');
+    }
 });
 
-// 🛑 THE FIX: Put a bouncer on your Webhook door
 app.post('/webhook', (req, res) => {
-    // If you add a secret token to Apps Script, check it here!
-    // const authHeader = req.headers['authorization'];
-    // if (authHeader !== `Bearer ${process.env.WEBHOOK_SECRET}`) return res.status(401).send('Unauthorized');
-
     res.status(200).send('Queued');
-    logger.log(`Webhook received. Position: ${requestQueue.length + 1}`, 'info', 'System');
+    
+    // 👇 THE FIX: Grab the sheet and row immediately so we know WHO is knocking
+    const targetName = req.body.sheetName ? `${req.body.sheetName} Row ${req.body.rowIndex}` : 'Unknown Task';
+    
+    logger.log(`Webhook received for [${targetName}]. Position in queue: ${requestQueue.length + 1}`, 'info', 'System');
     requestQueue.push(req.body);
     processQueue();
 });
 
 const PORT = process.env.PORT || 3005;
 server.listen(PORT, () => {
-    console.log(`\n🚀 TPM Master Orchestrator (v6.3) Online`);
+    console.log(`\n🚀 TPM Master Orchestrator Online on port ${PORT}`);
 });
