@@ -29,7 +29,7 @@ function extractLatestNotes(text) {
 }
 
 async function getVisibleHeaders(gsapi, spreadsheetId, sheetName) {
-    const spreadsheet = await gsapi.spreadsheets.get({ spreadsheetId, includeGridData: true, ranges: [`${sheetName}!1:1`] });
+    const spreadsheet = await gsapi.spreadsheets.get({ spreadsheetId, includeGridData: true, ranges: [`'${sheetName}'!1:1`] });
     const sheet = spreadsheet.data.sheets.find(s => s.properties.title === sheetName);
     if (!sheet || sheet.properties.hidden) return null;
     
@@ -124,7 +124,7 @@ let authClient, gsapi, projectName = `${sheetName} R${rowIndex}`;
 
         const response = await gsapi.spreadsheets.values.get({
             spreadsheetId: config.SPREADSHEET_ID,
-            range: `${sheetName}!A${rowIndex}:BZ${rowIndex}`, // 📉 RAM OPTIMIZATION: BZ is 78 columns max
+            range: `'${sheetName}'!A${rowIndex}:BZ${rowIndex}`, // 📉 RAM OPTIMIZATION: BZ is 78 columns max
         });
         const rowData = response.data.values ? response.data.values[0] : null;
         if (!rowData) throw new Error("Row is empty.");
@@ -232,17 +232,17 @@ let authClient, gsapi, projectName = `${sheetName} R${rowIndex}`;
             if (triggerValue.toLowerCase() === 'new' || target === 'slack') {
                 const draftCol = indexToLetter(getColIndex(headers, colMap.slackDraft));
                 const slackUrlCol = indexToLetter(getColIndex(headers, colMap.slackUrl));
-                updateData.push({ range: `${sheetName}!${draftCol}${rowIndex}`, values: [[ String(drafts.slack) ]] });
-                updateData.push({ range: `${sheetName}!${slackUrlCol}${rowIndex}`, values: [[ String(slackLink) ]] });
+                updateData.push({ range: `'${sheetName}'!${draftCol}${rowIndex}`, values: [[ String(drafts.slack) ]] });
+                updateData.push({ range: `'${sheetName}'!${slackUrlCol}${rowIndex}`, values: [[ String(slackLink) ]] });
             }
             
             if (triggerValue.toLowerCase() === 'new' || target === 'pdf') {
                 const emailUrlCol = indexToLetter(getColIndex(headers, colMap.emailUrl));
-                updateData.push({ range: `${sheetName}!${emailUrlCol}${rowIndex}`, values: [[ String(emailLink) ]] });
+                updateData.push({ range: `'${sheetName}'!${emailUrlCol}${rowIndex}`, values: [[ String(emailLink) ]] });
             }
             
             const triggerCol = indexToLetter(getColIndex(headers, colMap.trigger));
-            updateData.push({ range: `${sheetName}!${triggerCol}${rowIndex}`, values: [[ 'under review' ]] });
+            updateData.push({ range: `'${sheetName}'!${triggerCol}${rowIndex}`, values: [[ 'under review' ]] });
 
             await gsapi.spreadsheets.values.batchUpdate({
                 spreadsheetId: config.SPREADSHEET_ID,
@@ -271,7 +271,7 @@ let authClient, gsapi, projectName = `${sheetName} R${rowIndex}`;
                 const triggerColLetter = indexToLetter(getColIndex(headers, colMap.trigger));
                 await gsapi.spreadsheets.values.update({
                     spreadsheetId: config.SPREADSHEET_ID,
-                    range: `${sheetName}!${triggerColLetter}${rowIndex}`,
+                    range: `'${sheetName}'!${triggerColLetter}${rowIndex}`,
                     valueInputOption: 'RAW',
                     resource: { values: [['published']] }
                 });
@@ -307,7 +307,7 @@ async function updateSheetTrigger(sheetName, rowIndex, triggerValue) {
     
     await gsapi.spreadsheets.values.update({
         spreadsheetId: config.SPREADSHEET_ID,
-        range: `${sheetName}!${triggerCol}${rowIndex}`,
+        range: `'${sheetName}'!${triggerCol}${rowIndex}`,
         valueInputOption: 'USER_ENTERED',
         resource: { values: [[ triggerValue ]] }
     });
@@ -352,13 +352,13 @@ async function getKanbanData(requestedSheetName = null) {
 
     const response = await gsapi.spreadsheets.values.get({
         spreadsheetId: config.SPREADSHEET_ID,
-        range: `${sheetName}!A2:BZ` // 📉 RAM OPTIMIZATION: Prevent Node.js OOM on large sheets
+        range: `'${sheetName}'!A2:BZ` // 📉 RAM OPTIMIZATION: Prevent Node.js OOM on large sheets
     });
     
     const rows = response.data.values || [];
-    const projCol = getColIndex(headers, colMap.projectName);
-    const triggerCol = getColIndex(headers, colMap.trigger);
-    const draftCol = getColIndex(headers, colMap.slackDraft);
+    const projCol = headers.indexOf(colMap.projectName);
+    const triggerCol = headers.indexOf(colMap.trigger);
+    const draftCol = headers.indexOf(colMap.slackDraft);
     
     // Status might not exist in every user's sheet, so we use indexOf to prevent crashes
     const currentStatusCol = headers.indexOf(colMap.currentStatus);
@@ -373,8 +373,8 @@ async function getKanbanData(requestedSheetName = null) {
         return {
             row: index + 2, // A2 starts at row 2
             sheetName,
-            projectName: row[projCol] ? row[projCol].trim() : 'Untitled Project',
-            status: row[triggerCol] ? row[triggerCol].trim().toLowerCase() : '',
+            projectName: projCol !== -1 && row[projCol] ? row[projCol].trim() : 'Untitled Project',
+            status: triggerCol !== -1 && row[triggerCol] ? row[triggerCol].trim().toLowerCase() : '',
             currentStatus: currentStatusCol !== -1 && row[currentStatusCol] ? row[currentStatusCol].trim() : 'Uncategorized',
             phase: phaseCol !== -1 && row[phaseCol] ? row[phaseCol].trim() : 'General',
             assignee: assigneeCol !== -1 && row[assigneeCol] ? row[assigneeCol].trim() : '',
@@ -399,7 +399,7 @@ async function updateKanbanCell(sheetName, rowIndex, colKey, newValue) {
     
     await gsapi.spreadsheets.values.update({
         spreadsheetId: config.SPREADSHEET_ID,
-        range: `${sheetName}!${colLetter}${rowIndex}`,
+        range: `'${sheetName}'!${colLetter}${rowIndex}`,
         valueInputOption: 'USER_ENTERED',
         resource: { values: [[newValue]] }
     });

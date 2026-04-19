@@ -52,6 +52,7 @@ app.get('/api/columns', async (req, res) => {
         const data = await getVisibleHeadersForUi();
         res.json(data);
     } catch (error) {
+        logger.log(`API Error (Columns): ${error.message}`, 'error', 'System');
         res.status(500).json({ error: error.message });
     }
 });
@@ -63,6 +64,7 @@ app.post('/api/config', async (req, res) => {
         res.status(200).send('Saved');
     } catch (error) {
         console.error(error);
+        logger.log(`API Error (Config Save): ${error.message}`, 'error', 'System');
         res.status(500).send('Failed to save config');
     }
 });
@@ -86,6 +88,7 @@ app.post('/api/action', async (req, res) => {
         res.status(200).send('Action queued');
     } catch (error) {
         console.error(error);
+        logger.log(`API Error (Action Trigger): ${error.message}`, 'error', 'System');
         res.status(500).send(error.message);
     }
 });
@@ -95,6 +98,7 @@ app.get('/api/tpms', async (req, res) => {
         const tpms = await getTpms();
         res.json(tpms);
     } catch (error) {
+        logger.log(`API Error (Fetch TPMs): ${error.message}`, 'error', 'System');
         res.status(500).json({ error: error.message });
     }
 });
@@ -104,6 +108,7 @@ app.get('/api/kanban', async (req, res) => {
         const data = await getKanbanData(req.query.sheet);
         res.json(data);
     } catch (error) {
+        logger.log(`API Error (Kanban Fetch): ${error.message}`, 'error', 'System');
         res.status(500).json({ error: error.message });
     }
 });
@@ -114,6 +119,7 @@ app.post('/api/kanban/update', async (req, res) => {
         await updateKanbanCell(sheetName, row, colKey, newValue);
         res.status(200).send('Updated');
     } catch (error) {
+        logger.log(`API Error (Kanban Update): ${error.message}`, 'error', 'System');
         res.status(500).send(error.message);
     }
 });

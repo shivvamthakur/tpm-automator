@@ -115,6 +115,11 @@ function appendToTerminal(data) {
 socket.on('server-log', (data) => {
     appendToTerminal(data);
     updateProjectCardVisuals(data);
+    
+    // NEW: Show toast globally for errors and warnings
+    if (data.status === 'error' || data.status === 'warning') {
+        showSystemToast(data);
+    }
 });
 
 function updateProjectCardVisuals(data) {
@@ -458,6 +463,12 @@ async function fetchKanbanData() {
         const res = await fetch('/api/kanban');
         const projects = await res.json();
         
+        if (projects.error) {
+            const board = document.getElementById('kanban-board');
+            board.innerHTML = `<div class="w-full mt-10 p-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-center text-red-600 dark:text-red-400 font-medium">Failed to load board: ${projects.error}</div>`;
+            return;
+        }
+        
         const board = document.getElementById('kanban-board');
         board.innerHTML = '';
         
@@ -593,6 +604,11 @@ async function fetchListData(sheetName = null) {
         const res = await fetch(`/api/kanban?sheet=${encodeURIComponent(sheetName)}`);
         globalListData = await res.json();
         
+        if (globalListData.error) {
+            const board = document.getElementById('list-board');
+            board.innerHTML = `<div class="w-full mt-10 p-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-center text-red-600 dark:text-red-400 font-medium">Failed to load grid: ${globalListData.error}</div>`;
+            return;
+        }
         // Dynamically populate the status filter
         const statusSelect = document.getElementById('list-status-filter');
         const uniqueStatuses = [...new Set(globalListData.map(p => p.currentStatus || 'Uncategorized'))].sort();
@@ -751,4 +767,50 @@ window.triggerListAI = async (sheetName, row, btn) => {
     // Animate in, then auto-remove after 7 seconds
     setTimeout(() => toast.classList.remove('translate-y-full', 'opacity-0'), 50);
     setTimeout(() => { toast.classList.add('translate-y-full', 'opacity-0'); setTimeout(() => toast.remove(), 500); }, 7000);
+};
+
+// --- 7. System Error/Warning Toast ---
+window.showSystemToast = (data) => {
+    const container = document.getElementById('ai-toast-container');
+    if (!container) return;
+
+    const isError = data.status === 'error';
+    const title = isError ? 'System Error' : 'System Warning';
+    
+    // Explicit class strings used to ensure Tailwind JIT compilation works
+    const borderColor = isError ? 'border-red-200 dark:border-red-800' : 'border-yellow-200 dark:border-yellow-800';
+    const iconColor = isError ? 'text-red-500' : 'text-yellow-500';
+    const btnBg = isError ? 'bg-red-50 hover:bg-red-100 dark:bg-red-900/30 dark:hover:bg-red-900/50' : 'bg-yellow-50 hover:bg-yellow-100 dark:bg-yellow-900/30 dark:hover:bg-yellow-900/50';
+    const btnText = isError ? 'text-red-700 dark:text-red-400' : 'text-yellow-700 dark:text-yellow-400';
+
+    const toast = document.createElement('div');
+    toast.className = `pointer-events-auto bg-white dark:bg-slate-800 border ${borderColor} shadow-2xl rounded-xl p-4 w-80 transform translate-y-full opacity-0 transition-all duration-500 ease-out flex flex-col gap-3`;
+    
+    toast.innerHTML = `
+        <div class="flex justify-between items-start">
+            <div class="flex items-center gap-2 ${iconColor}">
+                <div class="w-6 h-6 flex items-center justify-center">${data.icon}</div>
+                <div class="overflow-hidden">
+                    <h4 class="font-bold text-slate-800 dark:text-white text-sm">${title}</h4>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 truncate w-48" title="${data.projectName}">[${data.projectName}]</p>
+                </div>
+            </div>
+            <button onclick="this.closest('.pointer-events-auto').remove()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 focus:outline-none">&times;</button>
+        </div>
+        <p class="text-xs text-slate-600 dark:text-slate-300 break-words" title="${data.message}">${data.message}</p>
+        <button onclick="switchView('view-console'); this.closest('.pointer-events-auto').remove()" class="w-full ${btnBg} ${btnText} ${borderColor} border text-xs font-bold py-2 rounded-lg transition shadow-sm flex items-center justify-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+            View in Console
+        </button>
+    `;
+    container.appendChild(toast);
+    
+    // Animate in, auto-remove after 10 seconds (gives them time to read errors)
+    setTimeout(() => toast.classList.remove('translate-y-full', 'opacity-0'), 50);
+    setTimeout(() => { 
+        if (toast.parentElement) {
+            toast.classList.add('translate-y-full', 'opacity-0'); 
+            setTimeout(() => toast.remove(), 500); 
+        }
+    }, 10000); 
 };
