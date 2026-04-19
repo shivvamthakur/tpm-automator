@@ -66,8 +66,21 @@ function extractDriveId(url) {
 async function getDynamicSchema(gsapi, spreadsheetId) {
     if (cachedSchema && (Date.now() - schemaCacheTime < CACHE_TTL)) return cachedSchema;
 
-    let colMap = { projectName: 'Project Name', slackChannelId: 'Slack Channel ID', slackDraft: 'Slack Draft (Raw Text)', trigger: 'Trigger',slackUrl: 'Slack Link', // 👈 NEW
-        emailUrl: 'Email Link', };
+    let colMap = { 
+        projectName: 'Project Name', 
+        slackChannelId: 'Slack Channel ID', 
+        slackDraft: 'Slack Draft (Raw Text)', 
+        trigger: 'Trigger', 
+        slackUrl: 'Slack Link', 
+        emailUrl: 'Email Link', 
+        currentStatus: 'Current Status',
+        phase: 'Phase',
+        assignee: 'Assignee',
+        dueDate: 'Due Date',
+        taskComments: 'Task and Status comments',
+        currentIntegrations: 'Current Integrations',
+        completedScope: 'Completed Scope'
+    };
 
     try {
         const response = await gsapi.spreadsheets.values.get({ spreadsheetId, range: `System_Settings!A2:B20` });
@@ -111,7 +124,7 @@ let authClient, gsapi, projectName = `${sheetName} R${rowIndex}`;
 
         const response = await gsapi.spreadsheets.values.get({
             spreadsheetId: config.SPREADSHEET_ID,
-            range: `${sheetName}!A${rowIndex}:ZZ${rowIndex}`, 
+            range: `${sheetName}!A${rowIndex}:BZ${rowIndex}`, // 📉 RAM OPTIMIZATION: BZ is 78 columns max
         });
         const rowData = response.data.values ? response.data.values[0] : null;
         if (!rowData) throw new Error("Row is empty.");
@@ -316,4 +329,80 @@ async function saveAiConfigToSheet(newConfig) {
     });
 }
 
-module.exports = { runAutomationTask, getVisibleHeadersForUi, saveAiConfigToSheet, updateSheetTrigger };
+async function getTpms() {
+    const authClient = await auth.getClient();
+    const gsapi = google.sheets({ version: 'v4', auth: authClient });
+    const meta = await gsapi.spreadsheets.get({ spreadsheetId: config.SPREADSHEET_ID });
+    // Return all visible tabs
+    return meta.data.sheets.filter(s => !s.properties.hidden && s.properties.title !== 'System_Settings').map(s => s.properties.title);
+}
+
+async function getKanbanData(requestedSheetName = null) {
+    const authClient = await auth.getClient();
+    const gsapi = google.sheets({ version: 'v4', auth: authClient });
+    
+    let sheetName = requestedSheetName;
+    if (!sheetName) {
+        const meta = await gsapi.spreadsheets.get({ spreadsheetId: config.SPREADSHEET_ID });
+        sheetName = meta.data.sheets.find(s => !s.properties.hidden).properties.title;
+    }
+    
+    const headers = await getVisibleHeaders(gsapi, config.SPREADSHEET_ID, sheetName);
+    const colMap = await getDynamicSchema(gsapi, config.SPREADSHEET_ID);
+
+    const response = await gsapi.spreadsheets.values.get({
+        spreadsheetId: config.SPREADSHEET_ID,
+        range: `${sheetName}!A2:BZ` // 📉 RAM OPTIMIZATION: Prevent Node.js OOM on large sheets
+    });
+    
+    const rows = response.data.values || [];
+    const projCol = getColIndex(headers, colMap.projectName);
+    const triggerCol = getColIndex(headers, colMap.trigger);
+    const draftCol = getColIndex(headers, colMap.slackDraft);
+    
+    // Status might not exist in every user's sheet, so we use indexOf to prevent crashes
+    const currentStatusCol = headers.indexOf(colMap.currentStatus);
+    const phaseCol = headers.indexOf(colMap.phase);
+    const assigneeCol = headers.indexOf(colMap.assignee);
+    const dueDateCol = headers.indexOf(colMap.dueDate);
+    const taskCommentsCol = headers.indexOf(colMap.taskComments);
+    const currentIntegrationsCol = headers.indexOf(colMap.currentIntegrations);
+    const completedScopeCol = headers.indexOf(colMap.completedScope);
+
+    return rows.map((row, index) => {
+        return {
+            row: index + 2, // A2 starts at row 2
+            sheetName,
+            projectName: row[projCol] ? row[projCol].trim() : 'Untitled Project',
+            status: row[triggerCol] ? row[triggerCol].trim().toLowerCase() : '',
+            currentStatus: currentStatusCol !== -1 && row[currentStatusCol] ? row[currentStatusCol].trim() : 'Uncategorized',
+            phase: phaseCol !== -1 && row[phaseCol] ? row[phaseCol].trim() : 'General',
+            assignee: assigneeCol !== -1 && row[assigneeCol] ? row[assigneeCol].trim() : '',
+            dueDate: dueDateCol !== -1 && row[dueDateCol] ? row[dueDateCol].trim() : '',
+            taskComments: taskCommentsCol !== -1 && row[taskCommentsCol] ? row[taskCommentsCol].trim() : '',
+            currentIntegrations: currentIntegrationsCol !== -1 && row[currentIntegrationsCol] ? row[currentIntegrationsCol].trim() : '',
+            completedScope: completedScopeCol !== -1 && row[completedScopeCol] ? row[completedScopeCol].trim() : '',
+            description: draftCol !== -1 && row[draftCol] ? row[draftCol].trim() : ''
+        };
+    }).filter(r => r.projectName !== 'Untitled Project');
+}
+
+async function updateKanbanCell(sheetName, rowIndex, colKey, newValue) {
+    const authClient = await auth.getClient();
+    const gsapi = google.sheets({ version: 'v4', auth: authClient });
+    const headers = await getVisibleHeaders(gsapi, config.SPREADSHEET_ID, sheetName);
+    const colMap = await getDynamicSchema(gsapi, config.SPREADSHEET_ID);
+
+    const idx = headers.indexOf(colMap[colKey] || colKey);
+    if (idx === -1) throw new Error(`Column "${colMap[colKey] || colKey}" not found in sheet.`);
+    const colLetter = indexToLetter(idx);
+    
+    await gsapi.spreadsheets.values.update({
+        spreadsheetId: config.SPREADSHEET_ID,
+        range: `${sheetName}!${colLetter}${rowIndex}`,
+        valueInputOption: 'USER_ENTERED',
+        resource: { values: [[newValue]] }
+    });
+}
+
+module.exports = { runAutomationTask, getVisibleHeadersForUi, saveAiConfigToSheet, updateSheetTrigger, getKanbanData, updateKanbanCell, getTpms };

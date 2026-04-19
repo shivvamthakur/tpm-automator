@@ -4,7 +4,7 @@ const http = require('http');
 const { Server } = require('socket.io'); 
 const path = require('path');
 const logger = require('./utils/logger');
-const { runAutomationTask, getVisibleHeadersForUi, saveAiConfigToSheet, updateSheetTrigger } = require('./services/orchestrator');
+const { runAutomationTask, getVisibleHeadersForUi, saveAiConfigToSheet, updateSheetTrigger, getKanbanData, updateKanbanCell, getTpms } = require('./services/orchestrator');
 
 const app = express();
 const server = http.createServer(app);
@@ -90,7 +90,35 @@ app.post('/api/action', async (req, res) => {
     }
 });
 
-app.post('/webhook', (req, res) => {
+app.get('/api/tpms', async (req, res) => {
+    try {
+        const tpms = await getTpms();
+        res.json(tpms);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/kanban', async (req, res) => {
+    try {
+        const data = await getKanbanData(req.query.sheet);
+        res.json(data);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/kanban/update', async (req, res) => {
+    try {
+        const { sheetName, row, colKey, newValue } = req.body;
+        await updateKanbanCell(sheetName, row, colKey, newValue);
+        res.status(200).send('Updated');
+    } catch (error) {
+        res.status(500).send(error.message);
+    }
+});
+
+app.post('/webhook', async (req, res) => {
     res.status(200).send('Queued');
     
     // 👇 THE FIX: Grab the sheet and row immediately so we know WHO is knocking

@@ -14,20 +14,42 @@
     <script src="/socket.io/socket.io.js"></script>
     <link rel="stylesheet" href="/admin.css">
 </head>
-<body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 font-sans h-screen flex flex-col transition-colors duration-200">
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 font-sans h-screen w-screen flex flex-col transition-colors duration-200 overflow-hidden">
 
-    <header class="bg-indigo-600 dark:bg-indigo-900 text-white shadow-md py-4 px-6 flex justify-between items-center transition-colors duration-200">
-        <div class="flex items-center space-x-4">
-            <button id="btn-back-home" onclick="switchView('view-home')" class="hidden bg-indigo-500 hover:bg-indigo-400 text-white p-2 rounded-lg transition">
+    <header class="bg-indigo-600 dark:bg-indigo-900 text-white shadow-md py-3 px-6 flex justify-between items-center transition-colors duration-200">
+        <!-- LEFT: Back Button & Title -->
+        <div class="flex items-center space-x-4 flex-1">
+            <button id="btn-back-home" onclick="switchView('view-home')" class="hidden bg-indigo-500 hover:bg-indigo-400 dark:bg-indigo-800 dark:hover:bg-indigo-700 text-white p-2 rounded-lg transition-colors shadow-sm">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
             </button>
             <div>
-                <h1 class="text-xl font-bold tracking-wide flex items-center space-x-2"><span id="header-title">🚀 TPM Orchestrator</span></h1>
-                <p class="text-indigo-200 dark:text-indigo-300 text-sm" id="header-subtitle">Command Center</p>
+                <h1 class="text-xl font-bold tracking-wide flex items-center space-x-2">
+                    <span id="header-title" class="flex items-center"><svg class="w-6 h-6 text-indigo-300 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5"></path></svg> TPM Orchestrator</span>
+                </h1>
             </div>
         </div>
         
-        <div class="flex items-center space-x-6">
+        <!-- CENTER: Navigation Bar -->
+        <nav class="hidden lg:flex p-1.5 space-x-1 bg-black/20 dark:bg-black/40 rounded-xl backdrop-blur-md border border-white/10 shadow-inner flex-none">
+            <button data-target="view-home" onclick="switchView('view-home')" class="nav-btn flex items-center gap-2 px-3 py-1.5 text-sm font-semibold rounded-lg transition-all duration-300">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg> Home
+            </button>
+            <button data-target="view-kanban" onclick="switchView('view-kanban')" class="nav-btn flex items-center gap-2 px-3 py-1.5 text-sm font-semibold rounded-lg transition-all duration-300">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"></path></svg> Kanban
+            </button>
+            <button data-target="view-list" onclick="switchView('view-list')" class="nav-btn flex items-center gap-2 px-3 py-1.5 text-sm font-semibold rounded-lg transition-all duration-300">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M8 14h12M8 18h12"></path></svg> Project Grid
+            </button>
+            <button data-target="view-ai-reports" onclick="switchView('view-ai-reports')" class="nav-btn flex items-center gap-2 px-3 py-1.5 text-sm font-semibold rounded-lg transition-all duration-300">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg> AI Reports
+            </button>
+            <button data-target="view-console" onclick="switchView('view-console')" class="nav-btn flex items-center gap-2 px-3 py-1.5 text-sm font-semibold rounded-lg transition-all duration-300">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg> Console
+            </button>
+        </nav>
+
+        <!-- RIGHT: Theme & Status -->
+        <div class="flex items-center justify-end space-x-6 flex-1">
             <button id="theme-toggle" class="p-2 rounded-full hover:bg-white/20 transition focus:outline-none" title="Toggle Theme">
                 <svg id="theme-toggle-dark-icon" class="w-5 h-5 hidden" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path></svg>
                 <svg id="theme-toggle-light-icon" class="w-5 h-5 hidden text-yellow-300" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clip-rule="evenodd"></path></svg>
@@ -40,23 +62,37 @@
         </div>
     </header>
 
-    <main class="flex-1 flex overflow-hidden p-6 gap-6">
+    <main class="flex-1 flex min-h-0 overflow-hidden p-6 gap-6">
         
         <!-- ==================== VIEW 1: DASHBOARD ==================== -->
-        <div id="view-home" class="w-full flex flex-col items-center justify-center space-y-8 animate-fade-in">
+        <div id="view-home" class="w-full flex flex-col items-center justify-center space-y-8">
             <h2 class="text-3xl font-light text-slate-600 dark:text-slate-300">Select a tool to launch</h2>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl w-full">
                 
+                <!-- Tool: Project Kanban -->
+                <div onclick="switchView('view-kanban')" class="hover-ripple group cursor-pointer bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-700 p-8 hover:shadow-2xl hover:border-blue-500 transition-all duration-300 transform hover:-translate-y-1">
+                    <div class="icon-box ripple-blue w-14 h-14 bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"></path></svg></div>
+                    <h3 class="text-2xl font-bold text-slate-800 dark:text-white mb-2">Project Kanban</h3>
+                    <p class="text-slate-500 dark:text-slate-400">Review current status of all projects in a kanban style matrix. Move them to different phases..</p>
+                </div>
+
+                <!-- Tool: Project Grid -->
+                <div onclick="switchView('view-list')" class="hover-ripple group cursor-pointer bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-700 p-8 hover:shadow-2xl hover:border-purple-500 transition-all duration-300 transform hover:-translate-y-1">
+                    <div class="icon-box ripple-purple w-14 h-14 bg-purple-100 dark:bg-purple-900/50 text-purple-600 dark:text-purple-400 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M8 14h12M8 18h12"></path></svg></div>
+                    <h3 class="text-2xl font-bold text-slate-800 dark:text-white mb-2">Project Grid</h3>
+                    <p class="text-slate-500 dark:text-slate-400">Hierarchical breakdown of Phases and Tasks. High density data grid with inline editing and direct AI triggers.</p>
+                </div>
+
                 <!-- Tool: AI Reports -->
-                <div onclick="switchView('view-ai-reports')" class="group cursor-pointer bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-700 p-8 hover:shadow-2xl hover:border-indigo-500 transition-all duration-300 transform hover:-translate-y-1">
-                    <div class="w-14 h-14 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 rounded-xl flex items-center justify-center text-2xl mb-4 group-hover:scale-110 transition-transform">🤖</div>
+                <div onclick="switchView('view-ai-reports')" class="hover-ripple group cursor-pointer bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-700 p-8 hover:shadow-2xl hover:border-indigo-500 transition-all duration-300 transform hover:-translate-y-1">
+                    <div class="icon-box ripple-indigo w-14 h-14 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg></div>
                     <h3 class="text-2xl font-bold text-slate-800 dark:text-white mb-2">AI Status Reports</h3>
                     <p class="text-slate-500 dark:text-slate-400">Configure checklist columns and monitor the generation pipeline of PDFs and Slack updates per project.</p>
                 </div>
 
                 <!-- Tool: System Console -->
-                <div onclick="switchView('view-console')" class="group cursor-pointer bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-700 p-8 hover:shadow-2xl hover:border-emerald-500 transition-all duration-300 transform hover:-translate-y-1">
-                    <div class="w-14 h-14 bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400 rounded-xl flex items-center justify-center text-2xl mb-4 group-hover:scale-110 transition-transform">💻</div>
+                <div onclick="switchView('view-console')" class="hover-ripple group cursor-pointer bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-700 p-8 hover:shadow-2xl hover:border-emerald-500 transition-all duration-300 transform hover:-translate-y-1">
+                    <div class="icon-box ripple-emerald w-14 h-14 bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg></div>
                     <h3 class="text-2xl font-bold text-slate-800 dark:text-white mb-2">System Console</h3>
                     <p class="text-slate-500 dark:text-slate-400">View raw webhook queues, router logic, failover logs, and raw backend execution in real-time.</p>
                 </div>
@@ -70,7 +106,7 @@
             <!-- Left: Checklists (Retained from original) -->
             <aside class="w-1/3 bg-white dark:bg-gray-800 rounded-xl shadow-xl flex flex-col border border-gray-200 dark:border-gray-700 transition-colors duration-200">
             <div class="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 rounded-t-xl transition-colors duration-200">
-                <h2 class="text-lg font-bold text-gray-700 dark:text-gray-200">⚙️ AI Context</h2>
+                <h2 class="text-lg font-bold text-gray-700 dark:text-gray-200 flex items-center"><svg class="w-5 h-5 mr-2 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg> AI Context</h2>
                 <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Select columns to feed to the AI.</p>
             </div>
             
@@ -138,8 +174,43 @@
             </div>
         </section>
         </div>
+
+        <!-- ==================== VIEW 4: PROJECT KANBAN ==================== -->
+        <div id="view-kanban" class="w-full hidden flex flex-col gap-4 h-full min-h-0">
+            <div class="flex justify-between items-center mb-2">
+                <h2 class="text-xl font-bold text-slate-800 dark:text-white">Active Projects</h2>
+                <div id="kanban-sync-status" class="text-xs font-bold text-slate-500 opacity-0 transition-opacity flex items-center"><svg class="w-4 h-4 mr-1 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Synced to Sheets</div>
+            </div>
+            
+            <!-- Dynamic Columns Container -->
+            <div id="kanban-board" class="flex-1 flex gap-6 overflow-x-auto pb-4 items-start">
+            </div>
+        </div>
+
+        <!-- ==================== VIEW 5: PROJECT GRID ==================== -->
+        <div id="view-list" class="w-full hidden flex flex-col gap-4 h-full min-h-0 overflow-hidden">
+            <div class="flex justify-between items-center mb-2">
+                <div class="flex items-center gap-4">
+                    <h2 class="text-xl font-bold text-slate-800 dark:text-white">Hierarchical Project List</h2>
+                    <select id="tpm-selector" onchange="fetchListData(this.value)" class="text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md px-3 py-1.5 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors shadow-sm font-semibold cursor-pointer"></select>
+                </div>
+                <div class="flex items-center gap-3">
+                    <input type="text" id="list-search" onkeyup="renderListData()" placeholder="Search projects or assignees..." class="text-sm w-64 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md px-3 py-1.5 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors shadow-sm">
+                    <select id="list-status-filter" onchange="renderListData()" class="text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md px-3 py-1.5 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors shadow-sm cursor-pointer">
+                        <option value="">All Statuses</option>
+                    </select>
+                    <div id="list-sync-status" class="text-xs font-bold text-slate-500 opacity-0 transition-opacity whitespace-nowrap flex items-center"><svg class="w-4 h-4 mr-1 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Synced</div>
+                </div>
+            </div>
+            <div id="list-board" class="flex-1 overflow-auto terminal-scroll bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-inner relative min-h-0">
+                <!-- Dynamic Table goes here -->
+            </div>
+        </div>
     </main>
 
-    <script src="/admin.js?v=3.0"></script>
+    <!-- AI Trigger Toast Container -->
+    <div id="ai-toast-container" class="fixed bottom-6 right-6 z-[100] flex flex-col gap-3 pointer-events-none"></div>
+
+    <script src="/admin.js?v=5.0"></script>
 </body>
 </html>
